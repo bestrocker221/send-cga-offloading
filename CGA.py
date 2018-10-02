@@ -2,7 +2,6 @@
 import hashlib, random, binascii, os
 from ipaddress import IPv6Address
 from struct import pack
-from dad import check_dad
 from scapy.all import ICMPv6ND_NS, IPv6, ICMPv6NDOptSrcLLAddr,sr
 
 
