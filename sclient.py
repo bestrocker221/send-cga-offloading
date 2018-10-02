@@ -1,4 +1,4 @@
-import socket, time, struct, ssl, os, json
+import socket, time, struct, ssl, os, json, argparse, sys
 from CGA import *
 
 ADDR = ("127.0.0.1", 7890)
@@ -16,40 +16,53 @@ context.options &= ~ssl.OP_CIPHER_SERVER_PREFERENCE
 #   Return 128bit CGA
 #
 def requestCGAtoServer(prefix):
-    with socket.create_connection(ADDR) as sock:
-        with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-            print("[*NETWORK INFO] Protocol used: " + ssock.version())
-            print("[*NETWORK INFO] Connected to %s on port %s" % ADDR)
-            
-            data = "CGAgen"         #many better ways to pass this
-            try:
-                print("[*NETWORK INFO] Sending prefix to Server")
-                ssock.send(json.dumps([data,prefix]).encode("utf-8"))
-            except BrokenPipeError:
-                print("[*EXCEPTION] Server closed the connection. Quitting...")
+    try:
+        with socket.create_connection(ADDR) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                print("[*NETWORK INFO] Protocol used: " + ssock.version())
+                print("[*NETWORK INFO] Connected to %s on port %s" % ADDR)
+                
+                data = "CGAgen"         #many better ways to pass this
+                try:
+                    print("[*NETWORK INFO] Sending prefix to Server")
+                    ssock.send(json.dumps([data,prefix]).encode("utf-8"))
+                except BrokenPipeError:
+                    print("[*EXCEPTION] Server closed the connection. Quitting...")
+                    ssock.close()
+                    exit(1)
+                try:
+                    data = ssock.recv(5000)
+                    data = data.decode("utf-8")
+                except Exception as e:
+                    print(e)
+                    exit(1)
+                #strip data into cga,parameters
                 ssock.close()
-                exit(1)
-            try:
-                data = ssock.recv(5000)
-                data = data.decode("utf-8")
-            except Exception as e:
-                print(e)
-                exit(1)
-            #strip data into cga,parameters
-            ssock.close()
-            data = json.loads(data)
-            addr = data[5]
-            parameters = []
-            parameters.append(data[0].encode("utf-8"))
-            parameters.append(data[1])
-            parameters.append(data[2].encode("utf-8"))
-            parameters.append(binascii.unhexlify(data[3].encode("utf-8")))
-            parameters.append(data[4].encode("utf-8"))
-            print("[*NETWORK INFO] Got CGA from server. Closing connection")
-            return addr,parameters
+                data = json.loads(data)
+                addr = data[5]
+                parameters = []
+                parameters.append(data[0].encode("utf-8"))
+                parameters.append(data[1])
+                parameters.append(data[2].encode("utf-8"))
+                parameters.append(binascii.unhexlify(data[3].encode("utf-8")))
+                parameters.append(data[4].encode("utf-8"))
+                print("[*NETWORK INFO] Got CGA from server. Closing connection")
+                return addr,parameters
+    except ConnectionRefusedError:
+        print("[*ERROR] Server is down.")
+        exit(0)
 
 if __name__ == "__main__":
-    mode = 2
+
+    parser = argparse.ArgumentParser(usage= sys.argv[0]+ ' -i <interface> -m <1|2>', \
+        description="Generate a CGA from a prefix and a public_key.")
+    parser.add_argument("-i", action="store", help='network interface to use', required=True)
+    parser.add_argument("-m", type=int, action='store', help='1 = local generation, 2 = offloaded generation', required=True)
+
+    args = parser.parse_args()
+    
+    mode = args.m
+    interface = args.i
 
     if os.geteuid() != 0:
         exit("You need to have root privileges to run this script.\n\
@@ -70,7 +83,7 @@ if __name__ == "__main__":
         while dad_check:
             (addr,parameters) = genCGA(1, public_key, prefix)
             #DAD detection
-            dad_check = check_dad(addr)
+            dad_check = check_dad(addr, interface)
             print("[*INFO] Performing Duplicate Address Detection... %s --> %s" % \
                 (dad_check, "We can't use it..\nRegenerating a new one" if dad_check else "CGA unused, we can use it." ))
             #if already exists -> generate new CGA
@@ -84,10 +97,11 @@ if __name__ == "__main__":
             #DAD detection
             print("[*INFO] CGA: %s" % addr)
             #print(parameters)
-            dad_check = check_dad(addr)
+            dad_check = check_dad(addr,interface)
             print("[*INFO] Performing Duplicate Address Detection... %s --> %s" % \
                 (dad_check, "We can't use it..\nRegenerating a new one" if dad_check else "CGA unused, we can use it." ))
             #if already exists -> generate new CGA
+        print("[*INFO] Verification returns: %s " % verifyCGA(addr,parameters))
 
 '''
 def requestSigningOfMessage(msg, CGA):
