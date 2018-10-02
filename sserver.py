@@ -13,7 +13,7 @@ class Server(object):
 		
 		self.context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
 		self.context.options &= ~ssl.OP_SINGLE_ECDH_USE
-		self.context.load_cert_chain(hostname + '.crt', hostname + '.pem')
+		self.context.load_cert_chain("keys/" + hostname + '.crt', "keys/" + hostname + '.pem')
 
 		self.mainLoop()
 
