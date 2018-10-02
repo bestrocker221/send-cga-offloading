@@ -1,4 +1,5 @@
-import socket, os, ssl, struct
+import socket, os, ssl, binascii, struct, json
+from CGA import *
 
 IP = "127.0.0.1"
 hostname = "manufacturer.com"
@@ -32,7 +33,6 @@ class Server(object):
 		exit(0)
 
 	def shutdown_client_socket(self, client_ssock):
-		#print("[*INFO] Client may has been disconnected..")
 		client_ssock.close()
 		print("[*INFO] Client socket closed")
 
@@ -45,18 +45,40 @@ class Server(object):
 					if len(data) == 0: 	#connection closed by client
 						self.shutdown_client_socket(client_ssock)
 						return
-					data = data.decode("utf-8")
-					print("%s:%s -> %s" % (addr[0], addr[1], data))
-
-					#TODO
-
+					data = json.loads(data.decode("utf-8"))
+					print("[CLIENT] %s:%s -> %s" % (addr[0], addr[1], data))
+					if data[0] == "CGAgen":
+						self.generateCGA(data, client_ssock, addr)
 				except struct.error as se:
 					self.shutdown_client_socket(client_ssock)
 					return
 				except KeyboardInterrupt as ke:
 					client_ssock.close()
 					self.shutdown()
-					
+	
+	# return cga and parameters
+	def generateCGA(self, data, csocket, addr_info):
+		public_key = open("keys/devicea.test.pub.der","rb").read()
+
+		#client should send a RouterSolicitation message
+		#Prefix must be given by a RouterAdvertisement message back..
+		#(addr,parameters) = genCGA(1, public_key)  #lets assume extFields = 0 or null
+
+		prefix = data[1]
+
+		(addr,parameters) = genCGA(1, public_key, prefix)
+		
+		params = []
+		params.append(parameters[0].decode("utf-8"))
+		params.append(parameters[1])
+		params.append(parameters[2].decode("utf-8"))
+		params.append(binascii.hexlify(parameters[3]).decode("utf-8"))
+		params.append(parameters[4].decode("utf-8"))
+		params.append(addr)
+		params = json.dumps(params)
+		print("[CLIENT] %s:%s -> GENERATED CGA: %s" % (addr_info[0], addr_info[1], addr) )
+		csocket.send(params.encode("utf-8"))
+
 
 if __name__ == '__main__':
 	try:
