@@ -2,7 +2,10 @@
 import hashlib, random, binascii
 from ipaddress import IPv6Address
 from struct import pack
+from dad import check_dad
 
+interface = "wlp59s0"
+hw_addr = "9c:b6:d0:fe:41:43"
 '''
 Following CGA creation guidelines and pseudocode by
 
@@ -11,73 +14,78 @@ https://en.wikipedia.org/wiki/Cryptographically_Generated_Address#CGA_generation
 '''
 
 def genCGA(sec, subnetPrefix, public_key, extFields = b''):
+	dad_check = True
+	while dad_check:
+		modifier = hex(random.randrange(0x00000000000000000000000000000000,
+										0xffffffffffffffffffffffffffffffff))[2:]
+		modifier = bytes(modifier,"utf-8")
+		print("Modifier: (length: %s bits)\n %s" % (len(bin(int(modifier,16))[2:]) , modifier) )
+		pubk = binascii.hexlify(public_key)
+		#print("Public Key length: %s bits" % len(bin(int(pubk,16))[2:]))
+		
+		#Label1 1 start
+		print("\nStarting phase 1 -> modifier creation..\n")
+		hash2 =  b''
+		n = 0
+		while True:
+			if sec == 0 or hash2[0:2*sec] == '00':
+				break
+			else:
+				n += 1
+				modifier = bytes(hex( int(modifier,16) + 1 )[2:], "utf-8")
+				
+				#TODO 
+				#how do i format extFields?
+				concatenate = modifier + b'00'*9 + pubk + extFields
 
-	modifier = hex(random.randrange(0x00000000000000000000000000000000,
-									0xffffffffffffffffffffffffffffffff))[2:]
-	modifier = bytes(modifier,"utf-8")
-	print("Modifier: (length: %s bits)\n %s" % (len(bin(int(modifier,16))[2:]) , modifier) )
-	pubk = binascii.hexlify(public_key)
-	#print("Public Key length: %s bits" % len(bin(int(pubk,16))[2:]))
-	
-	#Label1 1 start
-	print("\nStarting phase 1 -> modifier creation..\n")
-	hash2 =  b''
-	n = 0
-	while True:
-		if sec == 0 or hash2[0:2*sec] == '00':
-			break
-		else:
-			n += 1
-			modifier = bytes(hex( int(modifier,16) + 1 )[2:], "utf-8")
-			
-			#TODO 
-			#how do i format extFields?
-			concatenate = modifier + b'00'*9 + pubk + extFields
+				digest = hashlib.sha1(concatenate).hexdigest()
+				hash2 = digest[0:14]
+				
+		print("\tModifier found: %s" % modifier)
+		print("\tHash2 value:      %s" % hash2)
+		print("\tRounds made:      %s" % n)
 
-			digest = hashlib.sha1(concatenate).hexdigest()
-			hash2 = digest[0:14]
-			
-	print("\tModifier found: %s" % modifier)
-	print("\tHash2 value:      %s" % hash2)
-	print("\tRounds made:      %s" % n)
+		colCount = b'0' 				#collision count
 
-	colCount = b'0' 				#collision count
+		#Label2 start
+		print("\nStarting phase 2 -> Interface Identifier creation.. \n")
 
-	#Label2 start
-	print("\nStarting phase 2 -> Interface Identifier creation.. \n")
+		#formatting ipv6 prefix
+		ipv6Prefix = IPv6Address(subnetPrefix + ":0000:0000:0000:0000") 	#add the 64 least significant bits
+		subnetPrefix = ipv6Prefix.exploded[0:19]	
+		#just take the most 8*8=64 most significant bits of the whole 128bits ipv6 addr
+		ipv6Prefix = binascii.hexlify(ipv6Prefix.packed[0:8])
+		
+		concatenate = modifier + ipv6Prefix + colCount + pubk + extFields
 
-	#formatting ipv6 prefix
-	ipv6Prefix = IPv6Address(subnetPrefix + ":0000:0000:0000:0000") 	#add the 64 least significant bits
-	subnetPrefix = ipv6Prefix.exploded[0:19]	
-	#just take the most 8*8=64 most significant bits of the whole 128bits ipv6 addr
-	ipv6Prefix = binascii.hexlify(ipv6Prefix.packed[0:8])
-	
-	concatenate = modifier + ipv6Prefix + colCount + pubk + extFields
+		digest = hashlib.sha1(concatenate).hexdigest()
+		hash1 = digest[0:8] 		#8*8=64 most significant bits
+		intID = hash1 				#hash1 becomes Interface Identifier
+		
+		print("\tHash1 value:     %s " % hash1)
 
-	digest = hashlib.sha1(concatenate).hexdigest()
-	hash1 = digest[0:8] 		#8*8=64 most significant bits
-	intID = hash1 				#hash1 becomes Interface Identifier
-	
-	print("\tHash1 value:     %s " % hash1)
+		#binary AND --> int
+		intID_0 = (ord(intID[0]) & int("0x1c",16) | (sec << 5))
+		
+		#formatting str to binary	
+		intID = "".join(hex(ord(i))[2:] for i in intID[1:])
+		intID = hex(intID_0)[2:] + intID
+		print("\tHash1 hex value: %s " % intID)
 
-	#binary AND --> int
-	intID_0 = (ord(intID[0]) & int("0x1c",16) | (sec << 5))
-	
-	#formatting str to binary	
-	intID = "".join(hex(ord(i))[2:] for i in intID[1:])
-	intID = hex(intID_0)[2:] + intID
-	print("\tHash1 hex value: %s " % intID)
+		id1 = "{}:{}:{}:{}".format(intID[0:4],intID[4:8],intID[8:12],intID[12:16])
 
-	id1 = "{}:{}:{}:{}".format(intID[0:4],intID[4:8],intID[8:12],intID[12:16])
+		CGA = subnetPrefix + ":" + id1
+		print("\nCGA -> %s" % CGA)
+		#concatenate subnet prefix and ID
 
-	CGA = subnetPrefix + ":" + id1
-	print("\nCGA -> %s" % CGA)
-	#concatenate subnet prefix and ID
-
-	#DAD detection (hard part)
-	#TODO
-	
-	return (CGA, (modifier, subnetPrefix, colCount, public_key, extFields))
+		#DAD detection
+		#True if CGA address is already used else False
+		dad_check = check_dad(interface, hw_addr, CGA)
+		print("Performing Duplicate Address Detection... %s --> %s" % \
+			(dad_check, "We can't use it..\nRegenerating a new one" if dad_check else "CGA unused, we can use it." ))
+		#if already exists -> generate new CGA
+		
+		return (CGA, (modifier, subnetPrefix, colCount, public_key, extFields))
 
 def verifyCGA(CGA, parameters):
 	modifier = parameters[0]
