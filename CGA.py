@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import hashlib, random, binascii, os
+import hashlib, random, binascii, os, time
 from ipaddress import IPv6Address
 from struct import pack
 from scapy.all import ICMPv6ND_NS, IPv6, ICMPv6NDOptSrcLLAddr,sr
@@ -9,12 +9,41 @@ DEBUG = False
 
 #TODO
 #get this at runtime
-interface = "wlp59s0"
-hw_addr = "9c:b6:d0:fe:41:43"
+#interface = "wlp59s0"
+#hw_addr = "9c:b6:d0:fe:41:43"
 
-ifaces = os.listdir('/sys/class/net')
-if interface not in ifaces:
-	print("Interface %s does not exists on your machine." % interface)
+link_local_prefix = "FE80:"
+
+def check_iface(interface):
+	ifaces = os.listdir('/sys/class/net')
+	if interface not in ifaces:
+		print("Interface %s does not exists on your machine." % interface)
+		return True
+	return False
+
+
+#
+#	Format parameters in order to send them
+#
+#
+def format_parameters(data):
+    parameters = []
+    parameters.append(data[0].encode("utf-8"))
+    parameters.append(data[1])
+    parameters.append(data[2].encode("utf-8"))
+    parameters.append(binascii.unhexlify(data[3].encode("utf-8")))
+    parameters.append(data[4].encode("utf-8"))
+    return parameters
+
+
+def unformat_parameters(parameters):
+	params = []
+	params.append(parameters[0].decode("utf-8"))
+	params.append(parameters[1])
+	params.append(parameters[2].decode("utf-8"))
+	params.append(binascii.hexlify(parameters[3]).decode("utf-8"))
+	params.append(parameters[4].decode("utf-8"))
+	return params
 
 #
 #	Function that performs Duplicate Address Detection on a given IPv6 Address
@@ -23,7 +52,11 @@ if interface not in ifaces:
 #
 #	return True if address is already used, False if not
 #
-def check_dad(ipv6address, interface="wlp59s0", hw_addr="9c:b6:d0:fe:41:43", dst_a="ff02::1"):
+def check_dad(ipv6address, interface, hw_addr="9c:b6:d0:fe:41:43", dst_a="ff02::1"):
+	#TODO
+	#Get hw addr at runtime
+	if check_iface(interface):
+		return False
 	neigh_sol = IPv6(dst=dst_a)/\
 	ICMPv6ND_NS(tgt=ipv6address)/\
 	ICMPv6NDOptSrcLLAddr(lladdr=hw_addr)
@@ -42,7 +75,9 @@ https://en.wikipedia.org/wiki/Cryptographically_Generated_Address#CGA_generation
 #
 #	return CGA, parameters
 #
-def genCGA(sec, public_key, subnetPrefix, extFields = b''):
+def genCGA(sec, public_key, subnetPrefix=link_local_prefix, extFields = b''):
+	start_time = time.time()
+
 	modifier = hex(random.randrange(0x00000000000000000000000000000000,
 									0xffffffffffffffffffffffffffffffff))[2:]
 	modifier = bytes(modifier,"utf-8")
@@ -110,9 +145,12 @@ def genCGA(sec, public_key, subnetPrefix, extFields = b''):
 	if DEBUG:
 		print("\nCGA -> %s" % CGA)
 
+	print("[*TIME] CGA generation done in   %s" % str(time.time() - start_time))
 	return (CGA, (modifier, subnetPrefix, colCount, public_key, extFields))
 
 def verifyCGA(CGA, parameters):
+	start_time = time.time()
+
 	modifier = parameters[0]
 	subnetPrefix = parameters[1]
 	colCount = parameters[2]
@@ -170,7 +208,7 @@ def verifyCGA(CGA, parameters):
 
 	if hash1 != intID:
 		if DEBUG:
-			print("hash1 != intID  -->\n%s \n--\n%s" % (hash1, intID))
+			print("[*ERROR] hash1 != intID  -->\n%s \n--\n%s" % (hash1, intID))
 		return False
 
 	sec = int(CGA[18],16) >> 5
@@ -184,8 +222,8 @@ def verifyCGA(CGA, parameters):
 		print("\nHash1: %s\nintID: %s" % (hash1, intID))
 	if sec != 0 and hash2[0:2*sec] != 0:
 		if DEBUG:
-			print("hash2 not passed")
+			print("[*ERROR] hash2 not passed")
 		return False
-
+	print("[*TIME] CGA verification done in %s" % str(time.time() - start_time))
 	return True
 
