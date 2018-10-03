@@ -2,15 +2,10 @@
 import hashlib, random, binascii, os, time
 from ipaddress import IPv6Address
 from struct import pack
-from scapy.all import ICMPv6ND_NS, IPv6, ICMPv6NDOptSrcLLAddr,sr
+from scapy.all import ICMPv6ND_NS, IPv6, ICMPv6NDOptSrcLLAddr,sr, get_if_hwaddr
 
 
 DEBUG = False
-
-#TODO
-#get this at runtime
-#interface = "wlp59s0"
-#hw_addr = "9c:b6:d0:fe:41:43"
 
 link_local_prefix = "FE80:"
 
@@ -18,6 +13,9 @@ def check_iface(interface):
 	ifaces = os.listdir('/sys/class/net')
 	if interface not in ifaces:
 		print("Interface %s does not exists on your machine." % interface)
+		print("You have:")
+		for i in ifaces:
+			print("[ %s ]" % i)
 		return True
 	return False
 
@@ -27,13 +25,13 @@ def check_iface(interface):
 #
 #
 def format_parameters(data):
-    parameters = []
-    parameters.append(data[0].encode("utf-8"))
-    parameters.append(data[1])
-    parameters.append(data[2].encode("utf-8"))
-    parameters.append(binascii.unhexlify(data[3].encode("utf-8")))
-    parameters.append(data[4].encode("utf-8"))
-    return parameters
+	parameters = []
+	parameters.append(data[0].encode("utf-8"))
+	parameters.append(data[1])
+	parameters.append(data[2].encode("utf-8"))
+	parameters.append(binascii.unhexlify(data[3].encode("utf-8")))
+	parameters.append(data[4].encode("utf-8"))
+	return parameters
 
 
 def unformat_parameters(parameters):
@@ -53,13 +51,12 @@ def unformat_parameters(parameters):
 #	return True if address is already used, False if not
 #
 def check_dad(ipv6address, interface, hw_addr="9c:b6:d0:fe:41:43", dst_a="ff02::1"):
-	#TODO
-	#Get hw addr at runtime
 	if check_iface(interface):
-		return False
+		exit(1)
+	HW_MAC = get_if_hwaddr(interface)
 	neigh_sol = IPv6(dst=dst_a)/\
 	ICMPv6ND_NS(tgt=ipv6address)/\
-	ICMPv6NDOptSrcLLAddr(lladdr=hw_addr)
+	ICMPv6NDOptSrcLLAddr(lladdr=HW_MAC)
 	ans,u = sr(neigh_sol, timeout=1, iface=interface, multi=True, verbose=False)
 	return True if ans else False
 

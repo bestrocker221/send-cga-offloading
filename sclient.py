@@ -1,11 +1,16 @@
 import socket, time, struct, ssl, os, json, argparse, sys,time
 from CGA import *
+from Crypto.Cipher import AES
+import base64
 
 ADDR = ("127.0.0.1", 7890)
 
 hostname = 'manufacturer.com'
 context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
 context.options &= ~ssl.OP_CIPHER_SERVER_PREFERENCE
+
+secret128bit = b'akjds09podakdpoa'
+
 
 #
 #   Handle sending and receiving to Server through TCP & TLS
@@ -63,15 +68,28 @@ def send_with_udp(prefix):
     try:
         data = csock.recv(5000)
         data = data.decode("utf-8")
+
+        data = json.loads(data)
+
+        #DECRYPT
+        #need a json like { 1 = <encrypted json with params and CGA>, 2 = iv}
+        iv = binascii.unhexlify(data[1][0].encode("utf-8"))
+        ciphertext = data[0][0]
+        ciphertext = base64.b64decode(ciphertext)
+        decryption_suite = AES.new(secret128bit, AES.MODE_CFB, iv)
+        plain_text = decryption_suite.decrypt(ciphertext).decode()
+        plain_text = json.loads(plain_text)
+
+        parameters = plain_text
     except Exception as e:
         print(e)
         exit(1)
     #strip data into cga,parameters
     csock.close()
-    data = json.loads(data)
-    addr = data[5]
-    parameters = format_parameters(data)
+    addr = parameters[5]
+    parameters = format_parameters(parameters)
     print("[*NETWORK INFO] Got CGA from server. Closing connection")
+    #print("[*CRYPTO] RANDOM IV: %s" % iv)
     return addr,parameters
 
 #

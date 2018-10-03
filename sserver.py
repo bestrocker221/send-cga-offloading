@@ -1,11 +1,16 @@
 import socket, os, ssl, binascii, struct, json, argparse, sys
 from CGA import *
+from Crypto.Cipher import AES
+from Crypto import Random
+import base64
+
+
 
 IP = "127.0.0.1"
 hostname = "manufacturer.com"
 PORT = 7890
 
-secret = ""
+secret128bit = b'akjds09podakdpoa'
 
 class Server(object):
 	def __init__(self, ip, port, mode):
@@ -49,7 +54,16 @@ class Server(object):
 				data = json.loads(data.decode("utf-8"))
 				print("[CLIENT] %s:%s -> %s" % (addr[0], addr[1], data))
 				if data[0] == "CGAgen":
-						response = self.generateCGA(data, addr)
+						response, iv = self.generateCGA(data, addr, True)
+						data_to_encrypt = json.dumps(response[0])
+						#ENCRYPTING MESSAGE
+						encryption_suite = AES.new(secret128bit, AES.MODE_CFB, iv)
+						ciphertext = encryption_suite.encrypt(data_to_encrypt.encode("utf-8"))
+						# base64 encoding
+						#need a json like { 1 = <encrypted json with params and CGA>, 2 = iv}
+						ciphertext = base64.b64encode(ciphertext).decode()
+						response = json.dumps([[ciphertext],response[1]])
+
 						self.udp_sock.sendto(response.encode("utf-8"), addr)
 			except KeyboardInterrupt:
 				self.shutdown()
@@ -90,7 +104,7 @@ class Server(object):
 					self.shutdown()
 	
 	# return cga and parameters
-	def generateCGA(self, data, addr_info):
+	def generateCGA(self, data, addr_info, sym=False):
 		public_key = open("keys/devicea.test.pub.der","rb").read()
 
 		#client should send a RouterSolicitation message ?
@@ -99,10 +113,26 @@ class Server(object):
 		prefix = data[1]
 
 		(addr,parameters) = genCGA(1, public_key, prefix) if len(prefix)>1 else genCGA(1,public_key)
-		params = unformat_parameters(parameters)
-		params.append(addr)
-		params = json.dumps(params)
 		print("[CLIENT] %s:%s -> GENERATED CGA: %s" % (addr_info[0], addr_info[1], addr) )
+		
+		#prepare params for json
+		params = unformat_parameters(parameters)
+		#TODO maybe separate parameters from addr and iv in json
+		params.append(addr)
+		#ADD Initialization Vector
+
+		if sym:
+			r = Random.new().read(16)
+			iv = binascii.hexlify(r).decode("utf-8")
+			#print("[*CRYPTO]RANDOM IV: %s" % r)
+
+			response = []
+			response.append(params)
+			response.append([iv])
+			return response, r
+		else:
+			params = json.dumps(params)
+
 		return params
 
 
