@@ -142,7 +142,7 @@ def genCGA(sec, public_key, subnetPrefix=link_local_prefix, extFields = b''):
 	if DEBUG:
 		print("\nCGA -> %s" % CGA)
 
-	print("[*TIME] CGA generation done in   %s" % str(time.time() - start_time))
+	print("[*TIME] CGA generation done in     %s" % str(time.time() - start_time))
 	return (CGA, (modifier, subnetPrefix, colCount, public_key, extFields))
 
 def verifyCGA(CGA, parameters):
@@ -221,6 +221,6 @@ def verifyCGA(CGA, parameters):
 		if DEBUG:
 			print("[*ERROR] hash2 not passed")
 		return False
-	print("[*TIME] CGA verification done in %s" % str(time.time() - start_time))
+	print("[*TIME] CGA verification done in   %s" % str(time.time() - start_time))
 	return True
 

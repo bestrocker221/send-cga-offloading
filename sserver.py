@@ -142,6 +142,7 @@ if __name__ == '__main__':
 		description="Server for CGA offloading.\n")
 	parser.add_argument("-p", action="store", default='u', help='Protocol to use, t for TCP, u for udp')
 	parser.add_argument("--port", type=int, action='store', default=PORT , help='1 = local generation, 2 = offloaded generation')
+	parser.add_argument("-i", action='store', default='127.0.0.1', help="Set the ip where the server is listening, default 127.0.0.1")
 
 	args = parser.parse_args()
 
@@ -150,11 +151,11 @@ if __name__ == '__main__':
 		parser.print_help()
 		exit(1)
 	port = args.port
-
+	srv_ip = args.i
 	#1 tcp, 2 udp
 	mode = 1 if proto == "t" else 2
 	
 	try:
-		server = Server(IP, port, mode)
+		server = Server(srv_ip, port, mode)
 	except socket.error as err:
 		print("SocketError: %s" % str(err))

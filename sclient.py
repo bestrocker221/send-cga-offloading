@@ -3,7 +3,7 @@ from CGA import *
 from Crypto.Cipher import AES
 import base64
 
-ADDR = ("127.0.0.1", 7890)
+#ADDR = ("127.0.0.1", 7890)
 
 hostname = 'manufacturer.com'
 context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
@@ -11,6 +11,7 @@ context.options &= ~ssl.OP_CIPHER_SERVER_PREFERENCE
 
 secret128bit = b'akjds09podakdpoa'
 
+DEBUG = False
 
 #
 #   Handle sending and receiving to Server through TCP & TLS
@@ -20,12 +21,14 @@ def send_with_tls(prefix):
     try:
         with socket.create_connection(ADDR) as sock:
             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                print("[*NETWORK INFO] Protocol used: " + ssock.version())
-                print("[*NETWORK INFO] Connected to %s on port %s" % ADDR)
+                if DEBUG:
+                    print("[*NETWORK INFO] Protocol used: " + ssock.version())
+                    print("[*NETWORK INFO] Connected to %s on port %s" % ADDR)
                 
                 data = "CGAgen"         #many better ways to pass this
                 try:
-                    print("[*NETWORK INFO] Sending prefix to Server")
+                    if DEBUG:
+                        print("[*NETWORK INFO] Sending prefix to Server")
                     ssock.send(json.dumps([data,prefix]).encode("utf-8"))
                 except BrokenPipeError:
                     print("[*EXCEPTION] Server closed the connection. Quitting...")
@@ -44,7 +47,8 @@ def send_with_tls(prefix):
 
                 addr = data[5]
                 parameters = format_parameters(data)
-                print("[*NETWORK INFO] Got CGA from server. Closing connection")
+                if DEBUG:
+                        print("[*NETWORK INFO] Got CGA from server. Closing connection")
                 return addr,parameters
     except ConnectionRefusedError:
         print("[*ERROR] Server is down.")
@@ -54,14 +58,16 @@ def send_with_tls(prefix):
 #   Handle send/receive to Server through UDP
 #
 #
-def send_with_udp(prefix):
+def send_with_udp(prefix, addr):
     csock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    print("[*NETWORK INFO] Protocol used: UDP")
-    print("[*NETWORK INFO] %s on port %s" % ADDR)
+    if DEBUG:
+        print("[*NETWORK INFO] Protocol used: UDP")
+        print("[*NETWORK INFO] %s on port %s" % addr)
     data = "CGAgen"         #many better ways to pass this
     try:
-        print("[*NETWORK INFO] Sending prefix to Server")
-        csock.sendto(json.dumps([data,prefix]).encode("utf-8"), ADDR)
+        if DEBUG:
+            print("[*NETWORK INFO] Sending prefix to Server")
+        csock.sendto(json.dumps([data,prefix]).encode("utf-8"), addr)
     except Exception as e:
         print("[*EXCEPTION] %s " % e)
         exit(1)
@@ -88,7 +94,8 @@ def send_with_udp(prefix):
     csock.close()
     addr = parameters[5]
     parameters = format_parameters(parameters)
-    print("[*NETWORK INFO] Got CGA from server. Closing connection")
+    if DEBUG:
+        print("[*NETWORK INFO] Got CGA from server. Closing connection")
     #print("[*CRYPTO] RANDOM IV: %s" % iv)
     return addr,parameters
 
@@ -97,11 +104,11 @@ def send_with_udp(prefix):
 #
 #   Return 128bit CGA
 #
-def requestCGAtoServer(tls, prefix=""):
+def requestCGAtoServer(tls, addr,prefix=""):
     if tls:
-        return send_with_tls(prefix)
+        return send_with_tls(prefix, addr)
     else:
-        return send_with_udp(prefix)
+        return send_with_udp(prefix, addr)
 
 
 
@@ -114,22 +121,25 @@ if __name__ == "__main__":
     parser.add_argument("-i", action="store", help='network interface to use', required=True)
     parser.add_argument("-m", type=int, action='store', help='1 = local generation, 2 = offloaded generation', required=True)
     parser.add_argument("-tls", action="store_true", help="use TLS over TCP for server connection.")
-
-    parser.add_argument("-p", action='store', help='optional, use a different prefix for generating CGA')
+    parser.add_argument("--ip", action="store", default="127.0.0.1", help="set the IP of the server, default 127.0.0.1")
+    parser.add_argument("--port", action="store", type=int, default=7890, help="set the port to contact on the server, default is 7890")
+    parser.add_argument("--prefix", action='store', help='optional, use a different prefix for generating CGA')
     args = parser.parse_args()
     
     mode = args.m
     interface = args.i
     tls = args.tls if args.tls else None
+    addr = args.ip
+    port = args.port
 
-    print(tls)
+    addr = (addr, port)
     if os.geteuid() != 0:
         exit("You need to have root privileges to run this script.\n\
             Please try again, this time using 'sudo'. Exiting.")
 
 
     #TODO prefix get from RouterAdvertisement ? no link local has link_local_prefix
-    prefix = args.p if args.p else None
+    prefix = args.prefix if args.prefix else None
     
     if mode == 1:
         #just create a public-private rsa key pair before , MUST BE in DER format
@@ -153,15 +163,19 @@ if __name__ == "__main__":
         dad_check = True
         while dad_check:
             start_time = time.time()
-            addr,parameters = requestCGAtoServer(tls, prefix) if prefix else requestCGAtoServer(tls)
+            addr,parameters = requestCGAtoServer(tls, addr, prefix) if prefix else requestCGAtoServer(tls, addr)
             end_time = time.time() - start_time
+            print("[*TIME] Time for receiving the CGA %s now performing DAD" % end_time)
             #DAD detection
-            print("[*INFO] CGA: %s" % addr)
+            if DEBUG:
+                print("[*INFO] CGA: %s" % addr)
             dad_check = check_dad(addr,interface)
-            print("[*INFO] Performing Duplicate Address Detection... %s --> %s" % \
+            if DEBUG:
+                print("[*INFO] Performing Duplicate Address Detection... %s --> %s" % \
                 (dad_check, "We can't use it..\nRegenerating a new one" if dad_check else "CGA unused, we can use it." ))
             #if already exists -> generate new CGA
         #print("[*INFO] Verification returns: %s " % verifyCGA(addr,parameters))
+        #print("[*TIME] DAD Done. Total time (CGA from server + DAD) = %s" % (time.time() - start_time))
         verifyCGA(addr,parameters)
 
 '''
