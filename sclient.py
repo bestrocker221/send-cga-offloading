@@ -17,13 +17,13 @@ DEBUG = False
 #   Handle sending and receiving to Server through TCP & TLS
 #
 #
-def send_with_tls(prefix):
+def send_with_tls(prefix, addr):
     try:
-        with socket.create_connection(ADDR) as sock:
+        with socket.create_connection(addr) as sock:
             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
                 if DEBUG:
                     print("[*NETWORK INFO] Protocol used: " + ssock.version())
-                    print("[*NETWORK INFO] Connected to %s on port %s" % ADDR)
+                    print("[*NETWORK INFO] Connected to %s on port %s" % addr)
                 
                 data = "CGAgen"         #many better ways to pass this
                 try:
