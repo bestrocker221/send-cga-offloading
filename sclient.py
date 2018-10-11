@@ -164,6 +164,9 @@ if __name__ == "__main__":
         while dad_check:
             start_time = time.time()
             addr,parameters = requestCGAtoServer(tls, addr, prefix) if prefix else requestCGAtoServer(tls, addr)
+            #PUT TO FALSE JUST FO THE TEST, REMOVE IT
+            dad_check = False
+            ########################################
             end_time = time.time() - start_time
             print("[*TIME] Time for receiving the CGA %s now performing DAD" % end_time)
             #DAD detection
