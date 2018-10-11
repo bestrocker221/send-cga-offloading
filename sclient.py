@@ -170,6 +170,7 @@ if __name__ == "__main__":
             ########################################
             end_time = time.time() - start_time
             print("[*TIME] Time for receiving the CGA %s now performing DAD" % end_time)
+            return
             #DAD detection
             if DEBUG:
                 print("[*INFO] CGA: %s" % addr)
