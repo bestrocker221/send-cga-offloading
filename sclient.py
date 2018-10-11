@@ -157,7 +157,8 @@ if __name__ == "__main__":
             #    (dad_check, "We can't use it..\nRegenerating a new one" if dad_check else "CGA unused, we can use it." ))
             #if already exists -> generate new CGA
         #print("[*INFO] Verification returns: %s " % verifyCGA(addr,parameters))
-        verifyCGA(addr,parameters)
+        
+        #verifyCGA(addr,parameters)
 
     elif mode == 2:
         dad_check = True
@@ -179,7 +180,8 @@ if __name__ == "__main__":
             #if already exists -> generate new CGA
         #print("[*INFO] Verification returns: %s " % verifyCGA(addr,parameters))
         #print("[*TIME] DAD Done. Total time (CGA from server + DAD) = %s" % (time.time() - start_time))
-        verifyCGA(addr,parameters)
+        
+        #verifyCGA(addr,parameters)
 
 '''
 def requestSigningOfMessage(msg, CGA):
